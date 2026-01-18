@@ -1,10 +1,35 @@
 figma.showUI(__html__, { width: 320, height: 240, themeColors: true });
 
 const DEFAULT_FONT: FontName = { family: 'Inter', style: 'Regular' };
+const FALLBACK_COLOR: RGB = { r: 0, g: 0, b: 0 };
 
 const toNumber = (value: unknown, fallback = 0): number => {
   const num = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(num) ? num : fallback;
+};
+
+const parseHexColor = (value: string): RGB => {
+  const hex = value.replace('#', '').trim();
+  if (hex.length === 3) {
+    const r = parseInt(hex[0] + hex[0], 16);
+    const g = parseInt(hex[1] + hex[1], 16);
+    const b = parseInt(hex[2] + hex[2], 16);
+    return { r: r / 255, g: g / 255, b: b / 255 };
+  }
+  if (hex.length === 6 || hex.length === 8) {
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return { r: r / 255, g: g / 255, b: b / 255 };
+  }
+  return FALLBACK_COLOR;
+};
+
+const normalizeFontName = (value: any): FontName => {
+  if (value && typeof value === 'object' && value.family && value.style) {
+    return { family: String(value.family), style: String(value.style) };
+  }
+  return DEFAULT_FONT;
 };
 
 const applyPosition = (node: SceneNode, item: any) => {
@@ -14,81 +39,307 @@ const applyPosition = (node: SceneNode, item: any) => {
 
 const applySize = (node: SceneNode, item: any) => {
   if (!('resize' in node)) return;
-  const hasWidth = typeof item.w !== 'undefined';
-  const hasHeight = typeof item.h !== 'undefined';
+  const widthValue = typeof item.w !== 'undefined' ? item.w : item.width;
+  const heightValue = typeof item.h !== 'undefined' ? item.h : item.height;
+  const hasWidth = typeof widthValue !== 'undefined';
+  const hasHeight = typeof heightValue !== 'undefined';
   if (!hasWidth && !hasHeight) return;
-  const width = hasWidth ? toNumber(item.w, (node as any).width) : (node as any).width;
-  const height = hasHeight ? toNumber(item.h, (node as any).height) : (node as any).height;
+  const width = hasWidth ? toNumber(widthValue, (node as any).width) : (node as any).width;
+  const height = hasHeight ? toNumber(heightValue, (node as any).height) : (node as any).height;
   (node as any).resize(width, height);
 };
 
-const createNodeFromAction = async (item: any): Promise<SceneNode | null> => {
-  if (!item || typeof item !== 'object') return null;
-  const action = typeof item.action === 'string' ? item.action.toUpperCase() : 'CREATE';
+const applyCornerRadius = (node: SceneNode, item: any) => {
+  if (!('cornerRadius' in node)) return;
+  if (typeof item.cornerRadius === 'undefined') return;
+  (node as any).cornerRadius = toNumber(item.cornerRadius, 0);
+};
+
+const applyFills = (node: SceneNode, item: any) => {
+  if (!('fills' in node)) return;
+  if (!Array.isArray(item.fills)) return;
+  const paints: Paint[] = item.fills
+    .map((fill: any) => {
+      if (typeof fill === 'string') {
+        return { type: 'SOLID', color: parseHexColor(fill) } as SolidPaint;
+      }
+      if (fill && typeof fill === 'object' && fill.type === 'SOLID' && fill.color) {
+        return fill as SolidPaint;
+      }
+      return null;
+    })
+    .filter(Boolean) as Paint[];
+  if (paints.length > 0) {
+    (node as any).fills = paints;
+  }
+};
+
+const applyEffects = (node: SceneNode, item: any) => {
+  if (!('effects' in node)) return;
+  if (!Array.isArray(item.effects)) return;
+  const effects: Effect[] = item.effects
+    .map((effect: any) => {
+      if (!effect || typeof effect !== 'object') return null;
+      if (effect.type === 'DROP_SHADOW') {
+        const color = typeof effect.color === 'string' ? parseHexColor(effect.color) : FALLBACK_COLOR;
+        const opacity = toNumber(effect.opacity, 1);
+        return {
+          type: 'DROP_SHADOW',
+          color: { ...color, a: opacity },
+          offset: {
+            x: toNumber(effect.offset?.x, 0),
+            y: toNumber(effect.offset?.y, 0),
+          },
+          radius: toNumber(effect.radius, 0),
+          spread: toNumber(effect.spread, 0),
+          visible: effect.visible !== false,
+          blendMode: 'NORMAL',
+        } as DropShadowEffect;
+      }
+      return null;
+    })
+    .filter(Boolean) as Effect[];
+  if (effects.length > 0) {
+    (node as any).effects = effects;
+  }
+};
+
+const applyAutoLayout = (node: SceneNode, item: any) => {
+  if (!('layoutMode' in node)) return;
+  if (typeof item.layoutMode !== 'undefined') {
+    (node as any).layoutMode = item.layoutMode;
+  }
+  if (typeof item.primaryAxisSizingMode !== 'undefined') {
+    (node as any).primaryAxisSizingMode = item.primaryAxisSizingMode;
+  }
+  if (typeof item.counterAxisSizingMode !== 'undefined') {
+    (node as any).counterAxisSizingMode = item.counterAxisSizingMode;
+  }
+  if (typeof item.primaryAxisAlignItems !== 'undefined') {
+    (node as any).primaryAxisAlignItems = item.primaryAxisAlignItems;
+  }
+  if (typeof item.counterAxisAlignItems !== 'undefined') {
+    (node as any).counterAxisAlignItems = item.counterAxisAlignItems;
+  }
+  if (typeof item.paddingTop !== 'undefined') (node as any).paddingTop = toNumber(item.paddingTop, 0);
+  if (typeof item.paddingBottom !== 'undefined') (node as any).paddingBottom = toNumber(item.paddingBottom, 0);
+  if (typeof item.paddingLeft !== 'undefined') (node as any).paddingLeft = toNumber(item.paddingLeft, 0);
+  if (typeof item.paddingRight !== 'undefined') (node as any).paddingRight = toNumber(item.paddingRight, 0);
+  if (typeof item.itemSpacing !== 'undefined') (node as any).itemSpacing = toNumber(item.itemSpacing, 0);
+};
+
+const applyLayoutProps = (node: SceneNode, item: any) => {
+  if ('layoutAlign' in node && typeof item.layoutAlign !== 'undefined') {
+    (node as any).layoutAlign = item.layoutAlign;
+  }
+  if ('layoutGrow' in node && typeof item.layoutGrow !== 'undefined') {
+    (node as any).layoutGrow = toNumber(item.layoutGrow, 0);
+  }
+};
+
+const applyTextProps = (node: TextNode, item: any) => {
+  if (typeof item.characters === 'string') {
+    node.characters = item.characters;
+  }
+  if (typeof item.fontSize !== 'undefined') {
+    node.fontSize = toNumber(item.fontSize, Number(node.fontSize));
+  }
+  if (item.lineHeight && typeof item.lineHeight === 'object') {
+    node.lineHeight = {
+      unit: item.lineHeight.unit,
+      value: toNumber(item.lineHeight.value, 0),
+    };
+  }
+};
+
+const extractItemPayload = (item: any): any => {
+  if (!item) return null;
+  if (typeof item === 'string') {
+    const trimmed = item.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        return JSON.parse(trimmed);
+      } catch (error) {
+        console.warn('Failed to parse action string as JSON:', error);
+      }
+    }
+    return null;
+  }
+  if (typeof item !== 'object') return null;
+  if (item.create && typeof item.create === 'object') return item.create;
+  if (item.payload && typeof item.payload === 'object') return item.payload;
+  if (item.node && typeof item.node === 'object') return item.node;
+  if (item.element && typeof item.element === 'object') return item.element;
+  if (item.action && typeof item.action === 'object') return item.action;
+  return item;
+};
+
+const normalizeAction = (value: any): string => {
+  if (typeof value !== 'string') return 'CREATE';
+  const upper = value.toUpperCase();
+  if (upper.includes('CREATE') || upper.includes('ADD')) return 'CREATE';
+  return upper;
+};
+
+const normalizeType = (value: any, fallbackAction?: string): string => {
+  const raw =
+    typeof value === 'string'
+      ? value
+      : typeof fallbackAction === 'string'
+        ? fallbackAction
+        : '';
+  const upper = raw.toUpperCase();
+  if (upper.includes('TEXT')) return 'TEXT';
+  if (upper.includes('RECT')) return 'RECTANGLE';
+  if (upper.includes('ELLIPSE') || upper.includes('OVAL')) return 'ELLIPSE';
+  if (upper.includes('FRAME')) return 'FRAME';
+  if (upper.includes('LINE')) return 'LINE';
+  if (upper.includes('COMPONENT')) return 'COMPONENT';
+  return upper;
+};
+
+const createInstanceFromPayload = async (payload: any): Promise<InstanceNode | null> => {
+  if (payload.componentKey) {
+    try {
+      const component = await figma.importComponentByKeyAsync(String(payload.componentKey));
+      return component.createInstance();
+    } catch (error) {
+      console.warn('Failed to import component by key:', error);
+    }
+  }
+  if (payload.componentId) {
+    const component = figma.getNodeById(String(payload.componentId));
+    if (component && component.type === 'COMPONENT') {
+      return component.createInstance();
+    }
+  }
+  return null;
+};
+
+const createNodeFromAction = async (item: any, parent?: BaseNode & ChildrenMixin): Promise<SceneNode | null> => {
+  const payload = extractItemPayload(item);
+  if (!payload || typeof payload !== 'object') return null;
+  const action = normalizeAction(
+    payload.action || payload.operation || payload.op || payload.actionType
+  );
   if (action !== 'CREATE') return null;
 
-  const type = typeof item.type === 'string' ? item.type.toUpperCase() : '';
-  const name = typeof item.name === 'string' ? item.name : '';
+  const type = normalizeType(
+    payload.type || payload.nodeType || payload.kind,
+    payload.action
+  );
+  const name = typeof payload.name === 'string' ? payload.name : '';
 
+  let node: SceneNode | null = null;
   switch (type) {
     case 'TEXT': {
       const textNode = figma.createText();
       try {
-        await figma.loadFontAsync(DEFAULT_FONT);
-        textNode.fontName = DEFAULT_FONT;
-        const content = item.text || item.content || item.name || 'Text';
+        const fontName = normalizeFontName(payload.fontName);
+        await figma.loadFontAsync(fontName);
+        textNode.fontName = fontName;
+        const content = payload.text || payload.content || payload.name || 'Text';
         textNode.characters = String(content);
+        applyTextProps(textNode, payload);
       } catch (error) {
         console.error('Failed to load font for text:', error);
         return null;
       }
       if (name) textNode.name = name;
-      if (typeof item.w !== 'undefined' || typeof item.h !== 'undefined') {
+      if (typeof payload.w !== 'undefined' || typeof payload.h !== 'undefined') {
         textNode.textAutoResize = 'NONE';
-        applySize(textNode, item);
+        applySize(textNode, payload);
       }
-      applyPosition(textNode, item);
-      return textNode;
+      applyPosition(textNode, payload);
+      node = textNode;
+      break;
     }
     case 'RECTANGLE': {
       const rect = figma.createRectangle();
       if (name) rect.name = name;
-      applySize(rect, item);
-      applyPosition(rect, item);
-      return rect;
+      applySize(rect, payload);
+      applyPosition(rect, payload);
+      node = rect;
+      break;
     }
     case 'ELLIPSE': {
       const ellipse = figma.createEllipse();
       if (name) ellipse.name = name;
-      applySize(ellipse, item);
-      applyPosition(ellipse, item);
-      return ellipse;
+      applySize(ellipse, payload);
+      applyPosition(ellipse, payload);
+      node = ellipse;
+      break;
     }
     case 'FRAME': {
       const frame = figma.createFrame();
       if (name) frame.name = name;
-      applySize(frame, item);
-      applyPosition(frame, item);
-      return frame;
+      applyAutoLayout(frame, payload);
+      applySize(frame, payload);
+      applyPosition(frame, payload);
+      node = frame;
+      break;
     }
     case 'LINE': {
       const line = figma.createLine();
       if (name) line.name = name;
-      applySize(line, item);
-      applyPosition(line, item);
-      return line;
+      applySize(line, payload);
+      applyPosition(line, payload);
+      node = line;
+      break;
     }
     case 'COMPONENT': {
       const component = figma.createComponent();
       if (name) component.name = name;
-      applySize(component, item);
-      applyPosition(component, item);
-      return component;
+      applyAutoLayout(component, payload);
+      applySize(component, payload);
+      applyPosition(component, payload);
+      node = component;
+      break;
+    }
+    case 'INSTANCE': {
+      const instance = await createInstanceFromPayload(payload);
+      if (instance) {
+        if (name) instance.name = name;
+        applyAutoLayout(instance, payload);
+        applySize(instance, payload);
+        applyPosition(instance, payload);
+        node = instance;
+      } else {
+        console.warn('No component reference for instance; creating frame instead.');
+        const fallback = figma.createFrame();
+        if (name) fallback.name = name;
+        applyAutoLayout(fallback, payload);
+        applySize(fallback, payload);
+        applyPosition(fallback, payload);
+        node = fallback;
+      }
+      break;
     }
     default:
-      console.warn('Unknown action type:', item.type);
+      console.warn('Unsupported action type:', { action, type, item: payload });
       return null;
   }
+
+  if (!node) return null;
+  applyCornerRadius(node, payload);
+  applyFills(node, payload);
+  applyEffects(node, payload);
+  applyLayoutProps(node, payload);
+
+  if (parent && 'appendChild' in parent) {
+    parent.appendChild(node);
+  }
+
+  if (Array.isArray(payload.children) && 'appendChild' in node) {
+    for (const child of payload.children) {
+      const childNode = await createNodeFromAction(child, node as BaseNode & ChildrenMixin);
+      if (childNode) {
+        applyLayoutProps(childNode, child);
+      }
+    }
+  }
+
+  return node;
 };
 
 figma.ui.onmessage = async (msg) => {
@@ -203,6 +454,10 @@ figma.ui.onmessage = async (msg) => {
         return;
       }
       
+      if (!Array.isArray(actions) && actions && typeof actions === 'object') {
+        actions = [actions];
+      }
+
       if (Array.isArray(actions) && actions.length > 0) {
         console.log('Rendering ' + actions.length + ' predictions');
         figma.ui.postMessage({ type: 'prediction-ready', actions });
