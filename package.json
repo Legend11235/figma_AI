@@ -1,0 +1,32 @@
+{
+  "name": "figmacursor",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.122.0",
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
+    "css-loader": "^7.1.2",
+    "html-webpack-inline-source-plugin": "^0.0.10",
+    "html-webpack-plugin": "^5.6.6",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.5.4",
+    "typescript": "^5.9.3",
+    "webpack": "^5.104.1",
+    "webpack-cli": "^6.0.1"
+  },
+  "dependencies": {
+    "fastapi": "^0.0.8",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
+  }
+}

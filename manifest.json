@@ -1,0 +1,15 @@
+{
+  "name": "AI Design Predictor",
+  "id": "gumloop-figma-ai",
+  "api": "1.0.0",
+  "main": "dist/main.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": [
+      "https://api.gumloop.com",
+      "http://localhost:8000"
+    ],
+    "reasoning": "Sending Figma layer data to Gumloop via local proxy server for AI prediction."
+  }
+}
