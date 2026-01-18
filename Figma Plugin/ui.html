@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      font-family: Inter, sans-serif;
+      padding: 16px;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 8px;
+      cursor: pointer;
+    }
+    pre {
+      background: #f4f4f4;
+      padding: 8px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      max-height: 240px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+
+<h3>Design Assistant</h3>
+
+<button id="analyze">Analyze Selection</button>
+
+<pre id="output">Select a frame and click Analyze</pre>
+
+<script>
+  const output = document.getElementById("output");
+
+  document.getElementById("analyze").onclick = () => {
+    output.textContent = "📐 Analyzing design…";
+    parent.postMessage(
+      { pluginMessage: { type: "ANALYZE" } },
+      "*"
+    );
+  };
+
+  window.onmessage = (event) => {
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+
+    if (msg.type === "ERROR") {
+      output.textContent = "❌ " + msg.message;
+    }
+
+    if (msg.type === "AI_FEEDBACK") {
+      output.textContent = "🧠 AI Feedback:\n\n" + msg.text;
+    }
+  };
+</script>
+
+</body>
+</html>
